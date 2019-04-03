@@ -1,5 +1,6 @@
 package com.cognibank.securityMicroservice.Controller;
 
+import com.cognibank.securityMicroservice.Model.NotificationMessage;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
 import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
@@ -18,7 +19,6 @@ import java.util.*;
 
 @RestController("/")
 public class MainController {
-
 
     @Autowired
     private UserCodesRepository userCodesRepository;
@@ -93,8 +93,8 @@ public class MainController {
     public Map<String,String> sendOtpToNotification (@RequestBody String notificationDetails) {
 
         ObjectMapper mapper = new ObjectMapper();
-        String value = "";
-        Map<String, String> map = new HashMap<String, String>();
+        String value;
+        Map<String, String> map = new HashMap<>();
 
         try {
             map = mapper.readValue(notificationDetails, new TypeReference<Map<String, String>>() {
@@ -127,21 +127,16 @@ public class MainController {
 
 
 
-            System.out.println(map);
+            System.out.println("Map:" + map);
 
             //send to notifications --Rabbit MQ
-            try {ObjectWriter ow = mapper.writer().withDefaultPrettyPrinter();
-                String requestJson=ow.writeValueAsString(map);
-                System.out.println(requestJson);
-                rabbitSenderService.send(requestJson);
+            try {
+                NotificationMessage message = new NotificationMessage().withEmail(map.get("email")).withType(map.get("type")).withCode(Long.parseLong(map.get("code")));
+                rabbitSenderService.send(message);
             }catch(Exception e){
                 e.printStackTrace();
             }
-
-
         }
-
-
         return map;
     }
 
