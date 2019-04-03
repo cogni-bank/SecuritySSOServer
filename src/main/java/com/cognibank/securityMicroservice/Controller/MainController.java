@@ -8,13 +8,16 @@ import com.cognibank.securityMicroservice.Repository.UserCodesRepository;
 import com.cognibank.securityMicroservice.Service.RabbitSenderService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import javax.swing.text.html.parser.Entity;
 import java.util.*;
 
 @RestController("/")
@@ -29,21 +32,28 @@ public class MainController {
     @Autowired
     private RabbitSenderService rabbitSenderService;
 
+    @Autowired
+    private Environment env;
+
     @GetMapping("helloWorld")
-    public String HelloWorld() {
+    public String HelloWorld(HttpSession session) {
         System.out.print("sadsdisand ");
-        return "hello";
+        session.
+                setAttribute("favoriteColors", "asdasdfasd");
+
+        return "hello"+session.getAttribute("favoriteColors");
     }
 
     //Can
     @PostMapping (path = "userManagement" , consumes = "application/json", produces = "application/json")
     public UserDetails sendDataToUserManagement(@RequestBody String user) {
-//        System.out.println("adasdasd");
        System.out.print("sendDataToUserManagement " + user);
+
         UserDetails mailAndPhone = new UserDetails();
         mailAndPhone.setUserId(123456);
         mailAndPhone.setEmail("anilvarma@gmail.com");
         mailAndPhone.setPhone("+11234567890");
+
         return mailAndPhone;
     }
 
@@ -56,22 +66,30 @@ public class MainController {
 
 
 
+
     //Receive data from UI and forward it to UserManagement team and receive email address and phone number and forward email/phone to UI
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
-    public UserDetails loginUser (@RequestBody String user) {
+    public ResponseEntity<UserDetails> loginUser (@RequestBody String user , HttpSession session) {
 
         System.out.println(user);
-        final String uri = "http://localhost:8080/userManagement";
+        final String uri = env.getProperty("userManagement.getUserDetails");
         RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<String> request = new HttpEntity<>(user, headers);
         UserDetails userObjFromUserManagement =  restTemplate.postForObject(uri, request, UserDetails.class);
         System.out.println(("userObjFromUserManagement sending to UM " ) + userObjFromUserManagement);
-        userDetailsRepository.save(userObjFromUserManagement);
+      userDetailsRepository.save(userObjFromUserManagement);
+       //session.setAttribute("UserDetails",userObjFromUserManagement);
+
+      System.out.println(session.getAttribute("UserDetails"));
         System.out.println("Data sent to user----> " + maskUserDetails(userObjFromUserManagement).toString());
 
-        return maskUserDetails(userObjFromUserManagement);
+        if(userObjFromUserManagement.getUserId()== 0){
+            return new ResponseEntity<UserDetails>(HttpStatus.NOT_FOUND);
+
+        }
+        return new ResponseEntity<UserDetails>(maskUserDetails(userObjFromUserManagement), HttpStatus.OK);
     }
 
     //to mask the data of email and phone
@@ -90,7 +108,9 @@ public class MainController {
 
     //Receive data from UI and forward it to UserManagement team and receive email address and phone number and forward email/phone to UI
     @PostMapping(path = "sendOtp", consumes = "application/json", produces = "application/json")
-    public Map<String,String> sendOtpToNotification (@RequestBody String notificationDetails) {
+    public ResponseEntity<Map<String,String>> sendOtpToNotification (@RequestBody String notificationDetails, HttpSession session) {
+
+        System.out.print(notificationDetails);
 
         ObjectMapper mapper = new ObjectMapper();
         String value;
@@ -103,11 +123,14 @@ public class MainController {
         } catch (Exception e) {
             e.printStackTrace();
         }
+
         Optional<UserDetails> validateThisUser = userDetailsRepository.findById(Long.parseLong(map.get("userId")));
 
+        if(!validateThisUser.isPresent()){
+            return new ResponseEntity<Map<String, String>>(HttpStatus.NOT_FOUND);
+        }
         //if user present, get email/phone
-        if (validateThisUser.isPresent()) {
-
+       if (validateThisUser.isPresent()) {
             String type = map.get("type");
             //generate OTP
             String otpCode = generateOTP();
@@ -117,10 +140,15 @@ public class MainController {
                 value = validateThisUser.get().getPhone();
             }
 
-            userCodesRepository.save(new UserCodes()
-                                            .withUserId(Long.parseLong(map.get("userId")))
-                                            .withCode(otpCode)
-                                            .withType("otp"));
+            // Started the session for OTP Code
+            session.setAttribute("otpCode", new UserCodes().withUserId(Long.parseLong(map.get("userId")))
+                                                                  .withCode(otpCode)
+                                                                    .withType("otp"));
+
+
+
+            session.setMaxInactiveInterval(30);
+
             map.put(type,value);
             map.remove("userId");
             map.put("code",otpCode);
@@ -136,31 +164,41 @@ public class MainController {
             }catch(Exception e){
                 e.printStackTrace();
             }
-        }
-        return map;
+       }
+        return new ResponseEntity<Map<String, String>>(map,HttpStatus.OK);
     }
 
 
         //Recieved OTP from User and returning authID if authenticated
     @PostMapping(path = "validateUserWithOTP", consumes = "application/json", produces = "application/json")
-    public String validateUser(@RequestBody UserCodes userCodes, HttpServletResponse response){
+    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletResponse response, HttpSession session){
 
         String message = "User not found";
-        Optional<UserCodes> validateThisUser = userCodesRepository.findById(userCodes.getUserId());
+        // Optional<UserCodes> validateThisUser = userCodesRepository.findById(userCodes.getUserId());
+
+        UserCodes validateThisUser = (UserCodes) (session.getAttribute("otpCode"));
+
+
         System.out.println(validateThisUser);
-        if(validateThisUser.isPresent() && validateThisUser.get().getType().equalsIgnoreCase("otp")) {
-            if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.get().getCode())) {
+        if(validateThisUser == null || !(validateThisUser.getType().equalsIgnoreCase("otp"))){
+            return new ResponseEntity<>(message, HttpStatus.NOT_FOUND);
+        }
+       if(validateThisUser!=null && validateThisUser.getType().equalsIgnoreCase("otp")) {
+            if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.getCode())) {
                 String authCode = authCodeGenerator();
                 response.addHeader("Authorization", authCode);
-                validateThisUser.get().setType("authID");
-                validateThisUser.get().setCode(authCode);
-                userCodesRepository.save(validateThisUser.get());
-                userDetailsRepository.deleteById(validateThisUser.get().getUserId());
+                validateThisUser.setType("authID");
+                validateThisUser.setCode(authCode);
+                userCodesRepository.save(validateThisUser);
+                session.setAttribute("Auth",new UserCodes().withUserId(validateThisUser.getUserId())
+                        .withCode(authCode)
+                        .withType("Auth"));
+                userDetailsRepository.deleteById(validateThisUser.getUserId());
                 System.out.println("validateThisUser.toString() ----------------------------> " + validateThisUser.toString());
-                message = "User found!!! Hurray!!";
+               message = "User found!!! Hurray!!";
             }
         }
-        return message;
+       return new ResponseEntity<String>(message, HttpStatus.ACCEPTED);
 
     }
 
@@ -175,5 +213,26 @@ public class MainController {
         System.out.println(otp);
         return otp;
     }
+
+//    @GetMapping("auth/{userId}")
+//    public ResponseEntity<String> authenticatingTheRequest(@PathVariable Long id, HttpServletResponse httpServletResponse, HttpSession httpSession ) {
+//
+//        String authToCompare = httpServletResponse.getHeader("Authorization");
+//
+//        UserCodes authFromSession =(UserCodes)httpSession.getAttribute("Auth");
+//
+//       // if(authFromSession.)
+//
+//
+//
+//
+//        return null;
+//    }
+
+//    @ExceptionHandler
+//    @ResponseStatus(HttpStatus.NOT_FOUND)
+//    private void carNotFoundHandler(CarNotFoundException ex){
+//
+//    }
 
 }

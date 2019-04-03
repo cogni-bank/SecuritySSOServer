@@ -2,9 +2,13 @@ package com.cognibank.securityMicroservice.Model;
 
 import javax.persistence.Entity;
 import javax.persistence.Id;
+import java.io.Serializable;
 
 @Entity
-public class UserCodes {
+public class UserCodes implements Serializable {
+
+    private static final long serialversionUID =
+            12L;
 
     @Id
     private long userId;
