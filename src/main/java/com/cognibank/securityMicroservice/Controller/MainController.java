@@ -4,7 +4,6 @@ import com.cognibank.securityMicroservice.Model.NotificationMessage;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
 import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
-import com.cognibank.securityMicroservice.Repository.UserCodesRepository;
 import com.cognibank.securityMicroservice.Service.RabbitSenderService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,17 +22,22 @@ import java.util.*;
 @RestController("/")
 public class MainController {
 
-    @Autowired
-    private UserCodesRepository userCodesRepository;
+//    @Autowired
+//    private UserCodesRepository userCodesRepository;
 
     @Autowired
     private UserDetailsRepository userDetailsRepository;
 
-    @Autowired
-    private RabbitSenderService rabbitSenderService;
+    /*@Autowired
+    private RabbitSenderService rabbitSenderService;*/
 
     @Autowired
     private Environment env;
+
+    private Map<String, String> codesWithTypes = new HashMap<>();
+
+    @Autowired
+    private HttpSession session;
 
     @GetMapping("helloWorld")
     public String HelloWorld(HttpSession session) {
@@ -69,7 +73,7 @@ public class MainController {
 
     //Receive data from UI and forward it to UserManagement team and receive email address and phone number and forward email/phone to UI
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<UserDetails> loginUser (@RequestBody String user , HttpSession session) {
+    public ResponseEntity<UserDetails> loginUser (@RequestBody String user ) {
 
         System.out.println(user);
         final String uri = env.getProperty("userManagement.getUserDetails");
@@ -82,7 +86,7 @@ public class MainController {
       userDetailsRepository.save(userObjFromUserManagement);
        //session.setAttribute("UserDetails",userObjFromUserManagement);
 
-      System.out.println(session.getAttribute("UserDetails"));
+      //System.out.println(session.getAttribute("UserDetails"));
         System.out.println("Data sent to user----> " + maskUserDetails(userObjFromUserManagement).toString());
 
         if(userObjFromUserManagement.getUserId()== 0){
@@ -108,7 +112,7 @@ public class MainController {
 
     //Receive data from UI and forward it to UserManagement team and receive email address and phone number and forward email/phone to UI
     @PostMapping(path = "sendOtp", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<Map<String,String>> sendOtpToNotification (@RequestBody String notificationDetails, HttpSession session) {
+    public ResponseEntity<Map<String,String>> sendOtpToNotification (@RequestBody String notificationDetails) {
 
         System.out.print(notificationDetails);
 
@@ -129,6 +133,8 @@ public class MainController {
         if(!validateThisUser.isPresent()){
             return new ResponseEntity<Map<String, String>>(HttpStatus.NOT_FOUND);
         }
+
+        System.out.println("Inside send otp for validate user"+validateThisUser.get().getUserId());
         //if user present, get email/phone
        if (validateThisUser.isPresent()) {
             String type = map.get("type");
@@ -141,14 +147,18 @@ public class MainController {
             }
 
             // Started the session for OTP Code
-            session.setAttribute("otpCode", new UserCodes().withUserId(Long.parseLong(map.get("userId")))
-                                                                  .withCode(otpCode)
-                                                                    .withType("otp"));
+//            session.setAttribute("otpCode", new UserCodes().withUserId(Long.parseLong(map.get("userId")))
+//                                                                  .withCode(otpCode)
+//                                                                    .withType("otp"));
+
+           codesWithTypes.put("otp",otpCode);
+           session.setAttribute("otpCode", new UserCodes().withUserId(Long.parseLong(map.get("userId")))
+                   .withCodeTypes(codesWithTypes));
 
 
-
-            session.setMaxInactiveInterval(30);
-
+            session.setMaxInactiveInterval(500);
+        System.out.println("inside session with otp"+session.getAttribute("otpCode"));
+        System.out.println("get session id in send otp"+session.getId());
             map.put(type,value);
             map.remove("userId");
             map.put("code",otpCode);
@@ -158,12 +168,12 @@ public class MainController {
             System.out.println("Map:" + map);
 
             //send to notifications --Rabbit MQ
-            try {
+           /* try {
                 NotificationMessage message = new NotificationMessage().withEmail(map.get("email")).withType(map.get("type")).withCode(Long.parseLong(map.get("code")));
                 rabbitSenderService.send(message);
             }catch(Exception e){
                 e.printStackTrace();
-            }
+            }*/
        }
         return new ResponseEntity<Map<String, String>>(map,HttpStatus.OK);
     }
@@ -171,28 +181,37 @@ public class MainController {
 
         //Recieved OTP from User and returning authID if authenticated
     @PostMapping(path = "validateUserWithOTP", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletResponse response, HttpSession session){
+    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletResponse response){
 
         String message = "User not found";
-        // Optional<UserCodes> validateThisUser = userCodesRepository.findById(userCodes.getUserId());
+        session.setAttribute("otpCode", new UserCodes().withUserId(userCodes.getUserId())
+                .withCodeTypes(codesWithTypes));
 
+
+        session.setMaxInactiveInterval(500);
+        // Optional<UserCodes> validateThisUser = userCodesRepository.findById(userCodes.getUserId());
+        System.out.println("get session id in validate otp"+session.getId());
         UserCodes validateThisUser = (UserCodes) (session.getAttribute("otpCode"));
 
-
-        System.out.println(validateThisUser);
-        if(validateThisUser == null || !(validateThisUser.getType().equalsIgnoreCase("otp"))){
+System.out.println("inside validate user"+session.getAttribute("otpCode"));
+        System.out.println("##################"+validateThisUser);
+       Long typeValid = validateThisUser.getCodeTypes().keySet().stream().filter(s -> s.equalsIgnoreCase("otp")).count();
+       // if(validateThisUser == null || !(validateThisUser.getType().equalsIgnoreCase("otp"))){
+        if(validateThisUser == null || typeValid==0){
             return new ResponseEntity<>(message, HttpStatus.NOT_FOUND);
         }
-       if(validateThisUser!=null && validateThisUser.getType().equalsIgnoreCase("otp")) {
-            if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.getCode())) {
+      // if(validateThisUser!=null && validateThisUser.getType().equalsIgnoreCase("otp")) {
+        if(validateThisUser!=null && typeValid>0) {
+            if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.getCodeTypes().get("otp"))) {
                 String authCode = authCodeGenerator();
                 response.addHeader("Authorization", authCode);
-                validateThisUser.setType("authID");
-                validateThisUser.setCode(authCode);
-                userCodesRepository.save(validateThisUser);
+//                validateThisUser.setType("authID");
+//                validateThisUser.setCode(authCode);
+                codesWithTypes.put("authID",authCode);
+                validateThisUser.withCodeTypes(codesWithTypes);
+               // userCodesRepository.save(validateThisUser);
                 session.setAttribute("Auth",new UserCodes().withUserId(validateThisUser.getUserId())
-                        .withCode(authCode)
-                        .withType("Auth"));
+                        .withCodeTypes(codesWithTypes));
                 userDetailsRepository.deleteById(validateThisUser.getUserId());
                 System.out.println("validateThisUser.toString() ----------------------------> " + validateThisUser.toString());
                message = "User found!!! Hurray!!";
@@ -214,20 +233,27 @@ public class MainController {
         return otp;
     }
 
-//    @GetMapping("auth/{userId}")
-//    public ResponseEntity<String> authenticatingTheRequest(@PathVariable Long id, HttpServletResponse httpServletResponse, HttpSession httpSession ) {
-//
-//        String authToCompare = httpServletResponse.getHeader("Authorization");
-//
-//        UserCodes authFromSession =(UserCodes)httpSession.getAttribute("Auth");
-//
-//       // if(authFromSession.)
-//
-//
-//
-//
-//        return null;
-//    }
+    @GetMapping("auth/{userId}")
+    public ResponseEntity<String> authenticatingTheRequest(@PathVariable Long userId, HttpServletResponse httpServletResponse) {
+        String message=" user not found";
+        session.setAttribute("otpCode", new UserCodes().withUserId(userId)
+                .withCodeTypes(codesWithTypes));
+
+
+        session.setMaxInactiveInterval(500);
+        String authToCompare = httpServletResponse.getHeader("Authorization");
+        System.out.println(authToCompare +"authentication in response");
+
+        UserCodes authFromSession =(UserCodes)session.getAttribute("otpCode");
+
+        System.out.println(authFromSession+"from session auth");
+
+       if(authFromSession.getCodeTypes().get("authID").equalsIgnoreCase(authToCompare)){
+           message ="User is authenticated"+authFromSession.getCodeTypes().get("authID");
+       }
+
+        return new ResponseEntity<String>(message, HttpStatus.OK);
+    }
 
 //    @ExceptionHandler
 //    @ResponseStatus(HttpStatus.NOT_FOUND)

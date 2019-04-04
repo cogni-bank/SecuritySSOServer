@@ -70,7 +70,7 @@ public class SecurityMicroserviceApplicationTests {
 		newUser.setUserId(userID);
 		newUser.setCode("1234");
 		newUser.setType("otp");
-		userCodesRepository.save(newUser);
+	//	userCodesRepository.save(newUser);
 		this.mockMvc.perform(post("/validateUserWithOTP").contentType("application/json").content("{\n" +
 				"  \"userId\" : " + userID + ",\n" +
 				"  \"code\" : \"1234\"\n" +
