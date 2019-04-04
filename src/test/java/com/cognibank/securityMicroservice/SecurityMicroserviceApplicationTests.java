@@ -14,6 +14,9 @@ import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,15 +42,15 @@ public class SecurityMicroserviceApplicationTests {
 	public void contextLoads() {
 	}
 
-	@Test
-	public void helloWorldTesting() throws Exception {
-		this.mockMvc.perform(get("/helloWorld")).andExpect(status().isOk ())
-				.andExpect(content ().string(containsString ("hello")));
-	}
+//	@Test
+//	public void helloWorldTesting() throws Exception {
+//		this.mockMvc.perform(get("/helloWorld")).andExpect(status().isOk ())
+//				.andExpect(content ().string(containsString ("hello")));
+//	}
 
 	@Test
 	public void userNameAndPasswordInfo() throws Exception {
-		this.mockMvc.perform(post("/loginUser").contentType("application/json").content("{\n" +
+		this.mockMvc.perform(post("/security/loginUser").contentType("application/json").content("{\n" +
 				"  \"userName\" : \"anil\",\n" +
 				"  \"password\" : \"12345\"\n" +
 				"}")).andExpect(status().isOk()).andDo(print ()).andExpect(content ().string(containsString ("aniXXX@gmail.com")));
@@ -57,26 +60,27 @@ public class SecurityMicroserviceApplicationTests {
 	@Test
 	public void validateUserWithOTPWhenUserIsNotPresent() throws Exception {
 
-		this.mockMvc.perform(post("/validateUserWithOTP").contentType("application/json").content("{\n" +
+		this.mockMvc.perform(post("/security/validateUserWithOTP").contentType("application/json").content("{\n" +
 				"  \"userId\" : 123450988,\n" +
 				"  \"code\" : \"1234\"\n" +
 				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("User not found")));
 	}
 
-//	@Test
-//	public void validateUserWithOTPWhenUserIsPresent() throws Exception {
-//
-//		Long userID = 1234L;
-//		UserCodes newUser = new UserCodes();
-//		newUser.setUserId(userID);
-//		newUser.setCode("1234");
-//		newUser.setType("otp");
-//		userCodesRepository.save(newUser);
-//		this.mockMvc.perform(post("/validateUserWithOTP").contentType("application/json").content("{\n" +
-//				"  \"userId\" : " + userID + ",\n" +
-//				"  \"code\" : \"1234\"\n" +
-//				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("User found!!! Hurray!!")));
-//	}
+	@Test
+	public void validateUserWithOTPWhenUserIsPresent() throws Exception {
+		//arrange
+
+		Map<String, String> userCodesMap = new HashMap<>();
+		userCodesMap.put("otp","1234");
+		Long userID = 1234L;
+		UserCodes newUser = new UserCodes();
+		newUser.withUserId(userID).withCodeTypes(userCodesMap);
+		//userCodesRepository.save(newUser);
+		this.mockMvc.perform(post("/security/validateUserWithOTP").contentType("application/json").content("{\n" +
+				"  \"userId\" : " + userID + ",\n" +
+				"  \"code\" : \"1234\"\n" +
+				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("User found!!! Hurray!!")));
+	}
 
 	@Test
 	public void sendOtpNotifications() throws Exception{
@@ -86,7 +90,7 @@ public class SecurityMicroserviceApplicationTests {
 		userDetails.setEmail("anilvarma0093@gmail.com");
 		userDetails.setPhone("1234567890");
 		userDetailsRepository.save(userDetails);
-		this.mockMvc.perform(post("/sendOtp").contentType("application/json").content("{\n" +
+		this.mockMvc.perform(post("/security/sendOtp").contentType("application/json").content("{\n" +
 				"  \"userId\" : " + userID + ",\n" +
 				"  \"type\" : \"email\"\n" +
 				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("anilvarma0093@gmail.com")));
@@ -94,7 +98,7 @@ public class SecurityMicroserviceApplicationTests {
 
 	@Test
 	public void userAuthentication() throws Exception{
-		mockMvc.perform(MockMvcRequestBuilders.get("/auth").header("Authorization", "MTIzNDU2"))
+		mockMvc.perform(MockMvcRequestBuilders.get("/security/auth").header("Authorization", "MTIzNDU2"))
 				.andDo(print ()).andExpect(status().isOk());
 
 	}
@@ -102,7 +106,7 @@ public class SecurityMicroserviceApplicationTests {
 	@Test
 	public void userAuthenticationFailed() throws Exception{
 
-		mockMvc.perform(MockMvcRequestBuilders.get("/auth").header("Authorization", "MTIzND"))
+		mockMvc.perform(MockMvcRequestBuilders.get("/security/auth").header("Authorization", "MTIzND"))
 				.andDo(print ()).andExpect(status().isNotFound());
 
 	}

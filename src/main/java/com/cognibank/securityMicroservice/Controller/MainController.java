@@ -8,6 +8,9 @@ import com.cognibank.securityMicroservice.Service.RabbitSenderService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.*;
@@ -20,6 +23,7 @@ import javax.servlet.http.HttpSession;
 import java.util.*;
 
 @RestController("/")
+@Api(description = "Set of endpoints for authentication, generating otp for email and phone userDetails.")
 public class MainController {
 
 
@@ -53,11 +57,8 @@ public class MainController {
         System.out.print("sendDataToNotification " + emailOrPhone);
     }
 
-
-
-
-
     //Receive data from UI and forward it to UserManagement team and receive email address and phone number and forward email/phone to UI
+    @ApiOperation("Returns user details from user management")
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
     public ResponseEntity<UserDetails> loginUser (@RequestBody String user , HttpSession session) {
 
@@ -93,8 +94,11 @@ public class MainController {
     }
 
     //Receive data from UI and forward it to UserManagement team and receive email address and phone number and forward email/phone to UI
+    @ApiOperation("Sending otp to RabbitMQ")
     @PostMapping(path = "sendOtp", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<Map<String,String>> sendOtpToNotification (@RequestBody String notificationDetails, HttpSession session) {
+    public ResponseEntity<Map<String,String>> sendOtpToNotification (
+            @ApiParam(name="userId", value = "email", required = true)
+            @RequestBody String notificationDetails, HttpSession session) {
 
         ObjectMapper mapper = new ObjectMapper();
         String value;
@@ -147,31 +151,32 @@ public class MainController {
 
 
     //Recieved OTP from User and returning authID if authenticated
+    @ApiOperation("Validating the user with otp")
     @PostMapping(path = "validateUserWithOTP", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletResponse response, HttpSession session){
+    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletResponse response, HttpSession session) {
 
         String message = "User not found";
+        Long typeValid;
 
         UserCodes validateThisUser = (UserCodes) (session.getAttribute("otpCode"));
-
-        Long typeValid = validateThisUser.getCodeTypes().keySet().stream().filter(s -> s.equalsIgnoreCase("otp")).count();
-    if(validateThisUser == null || typeValid==0){
-            return new ResponseEntity<>(message, HttpStatus.NOT_FOUND);
+        if(validateThisUser!= null) {
+             typeValid = validateThisUser.getCodeTypes().keySet().stream().filter(s -> s.equalsIgnoreCase("otp")).count();
+        if (typeValid == 0) {
+            return new ResponseEntity<String>("Session Expired", HttpStatus.NOT_FOUND);
         }
-        if(validateThisUser!=null && typeValid>0) {
-            if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.getCodeTypes().get("otp"))) {
-                String authCode = authCodeGenerator(validateThisUser.getUserId());
-                response.addHeader("Authorization", authCode);
+                if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.getCodeTypes().get("otp"))) {
+            String authCode = authCodeGenerator(validateThisUser.getUserId());
+            response.addHeader("Authorization", authCode);
 
-                codesWithTypes.put("authID",authCode);
-                validateThisUser.withCodeTypes(codesWithTypes);
-                session.setAttribute("otpCode",new UserCodes().withUserId(validateThisUser.getUserId())
-                        .withCodeTypes(codesWithTypes));
-                userDetailsRepository.deleteById(validateThisUser.getUserId());
-                message = "User found!!! Hurray!!";
-                return new ResponseEntity<String>(message, HttpStatus.ACCEPTED);
-            }
+            codesWithTypes.put("authID", authCode);
+            validateThisUser.withCodeTypes(codesWithTypes);
+            session.setAttribute("otpCode", new UserCodes().withUserId(validateThisUser.getUserId())
+                    .withCodeTypes(codesWithTypes));
+            // userDetailsRepository.deleteById(validateThisUser.getUserId());
+            message = "User found!!! Hurray!!";
+            return new ResponseEntity<String>(message, HttpStatus.OK);
         }
+}
         return new ResponseEntity<String>(message, HttpStatus.NOT_FOUND);
 
     }
@@ -179,7 +184,9 @@ public class MainController {
 
 
     public String authCodeGenerator(Long userId) {
-       return  Base64.getEncoder().encodeToString(userId.toString().getBytes());
+        String credentials = UUID.randomUUID().toString();
+
+       return  Base64.getEncoder().encodeToString((userId+":"+credentials).getBytes());
     }
 
     public String generateOTP() {
@@ -188,10 +195,12 @@ public class MainController {
         return otp;
     }
 
+
+    @ApiOperation("Checking for user authentication")
     @GetMapping("auth")
     public ResponseEntity<String> authenticatingTheRequest(HttpServletRequest httpServletResponse, HttpSession session) {
         String message=" user not found";
-
+    System.out.println("Hi");
         String authToCompare = httpServletResponse.getHeader("Authorization");
 
         UserCodes authFromSession =(UserCodes)session.getAttribute("otpCode");
@@ -199,11 +208,37 @@ public class MainController {
 
         if(authFromSession.getCodeTypes().get("authID").equalsIgnoreCase(authToCompare)){
             message ="User is authenticated";
-            return new ResponseEntity<String>(message, HttpStatus.OK);
+            return new ResponseEntity<String>(HttpStatus.OK);
         }
 
-        return new ResponseEntity<String>(message, HttpStatus.NOT_FOUND);
+        return new ResponseEntity<String>(HttpStatus.NOT_FOUND);
+
     }
+
+    @GetMapping(value = "forward")
+    public ResponseEntity<String> forwardToMe(HttpServletRequest httpServletRequest, HttpSession httpSession){
+        System.out.print("asdadfasd");
+
+        UserCodes authFromSession =(UserCodes)httpSession.getAttribute("otpCode");
+
+            if(authFromSession!=null) {
+                if (authFromSession.getCodeTypes().get("authID").equalsIgnoreCase(httpServletRequest.getHeader("Authorization"))) {
+                    System.out.println("in accpeted");
+                    return new ResponseEntity<String>(HttpStatus.ACCEPTED);
+                }
+            }
+        System.out.println("in unautherized" + new ResponseEntity<String>(HttpStatus.UNAUTHORIZED));
+        return new ResponseEntity<String>(HttpStatus.UNAUTHORIZED);
+    }
+
+    private boolean isPresent(String authorization) {
+        if(authorization==null || authorization.isEmpty())
+        {
+            return false;
+        }
+        return true;
+    }
+
     @ExceptionHandler
     @ResponseStatus(HttpStatus.NOT_FOUND)
     private void userNotFoundHandler(UserNotFoundException ex){
