@@ -3,17 +3,19 @@ package com.cognibank.securityMicroservice.Model;
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import java.io.Serializable;
+import java.util.Map;
 
-@Entity
+//@Entity
 public class UserCodes implements Serializable {
 
     private static final long serialversionUID =
             12L;
 
-    @Id
+  //  @Id
     private long userId;
     private String type;
     private String code;
+    private Map<String, String> codeTypes;
 
 
     public UserCodes withUserId(long userId){
@@ -29,12 +31,17 @@ public class UserCodes implements Serializable {
         return this;
     }
 
-    public long getUserId() {
-        return userId;
+    public UserCodes withCodeTypes(Map<String,String> codes){
+        this.codeTypes = codes;
+        return this;
     }
 
-    public void setUserId(long userId) {
-        this.userId = userId;
+    public Map<String, String> getCodeTypes() {
+        return codeTypes;
+    }
+
+    public long getUserId() {
+        return userId;
     }
 
     public String getType() {
@@ -57,8 +64,7 @@ public class UserCodes implements Serializable {
     public String toString() {
         return "UserCodes{" +
                 "userId=" + userId +
-                ", type='" + type + '\'' +
-                ", code='" + code + '\'' +
+                ", codeTypes=" + codeTypes +
                 '}';
     }
 }

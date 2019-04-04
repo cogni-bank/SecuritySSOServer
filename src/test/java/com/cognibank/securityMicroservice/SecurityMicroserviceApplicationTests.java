@@ -2,7 +2,7 @@ package com.cognibank.securityMicroservice;
 
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
-import com.cognibank.securityMicroservice.Repository.UserCodesRepository;
+//import com.cognibank.securityMicroservice.Repository.UserCodesRepository;
 import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
 import org.hamcrest.Matchers;
 import org.junit.Test;
@@ -12,6 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,8 +29,8 @@ public class SecurityMicroserviceApplicationTests {
 	@Autowired
 	private MockMvc mockMvc;
 
-	@Autowired
-	private UserCodesRepository userCodesRepository;
+//	@Autowired
+//	private UserCodesRepository userCodesRepository;
 
 	@Autowired
 	private UserDetailsRepository userDetailsRepository;
@@ -62,20 +63,20 @@ public class SecurityMicroserviceApplicationTests {
 				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("User not found")));
 	}
 
-	@Test
-	public void validateUserWithOTPWhenUserIsPresent() throws Exception {
-
-		Long userID = 1234L;
-		UserCodes newUser = new UserCodes();
-		newUser.setUserId(userID);
-		newUser.setCode("1234");
-		newUser.setType("otp");
-		userCodesRepository.save(newUser);
-		this.mockMvc.perform(post("/validateUserWithOTP").contentType("application/json").content("{\n" +
-				"  \"userId\" : " + userID + ",\n" +
-				"  \"code\" : \"1234\"\n" +
-				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("User found!!! Hurray!!")));
-	}
+//	@Test
+//	public void validateUserWithOTPWhenUserIsPresent() throws Exception {
+//
+//		Long userID = 1234L;
+//		UserCodes newUser = new UserCodes();
+//		newUser.setUserId(userID);
+//		newUser.setCode("1234");
+//		newUser.setType("otp");
+//		userCodesRepository.save(newUser);
+//		this.mockMvc.perform(post("/validateUserWithOTP").contentType("application/json").content("{\n" +
+//				"  \"userId\" : " + userID + ",\n" +
+//				"  \"code\" : \"1234\"\n" +
+//				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("User found!!! Hurray!!")));
+//	}
 
 	@Test
 	public void sendOtpNotifications() throws Exception{
@@ -89,6 +90,21 @@ public class SecurityMicroserviceApplicationTests {
 				"  \"userId\" : " + userID + ",\n" +
 				"  \"type\" : \"email\"\n" +
 				"}")).andDo(print ()).andExpect(status().isOk()).andExpect(content ().string(Matchers.containsString ("anilvarma0093@gmail.com")));
+	}
+
+	@Test
+	public void userAuthentication() throws Exception{
+		mockMvc.perform(MockMvcRequestBuilders.get("/auth").header("Authorization", "MTIzNDU2"))
+				.andDo(print ()).andExpect(status().isOk());
+
+	}
+
+	@Test
+	public void userAuthenticationFailed() throws Exception{
+
+		mockMvc.perform(MockMvcRequestBuilders.get("/auth").header("Authorization", "MTIzND"))
+				.andDo(print ()).andExpect(status().isNotFound());
+
 	}
 
 }
