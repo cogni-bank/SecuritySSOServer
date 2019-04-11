@@ -9,15 +9,33 @@ public class UserDetails implements Serializable {
     private static final long serialversionUID = 1L;
 
     @Id
-    private long userId;
+    private String userId;
     private String email;
     private String phone;
+    private boolean hasNumber;
+    private boolean hasEmail;
 
-    public long getUserId() {
+    public boolean isHasNumber() {
+        return hasNumber;
+    }
+
+    public void setHasNumber(boolean hasNumber) {
+        this.hasNumber = hasNumber;
+    }
+
+    public boolean isHasEmail() {
+        return hasEmail;
+    }
+
+    public void setHasEmail(boolean hasEmail) {
+        this.hasEmail = hasEmail;
+    }
+
+    public String getUserId() {
         return userId;
     }
 
-    public void setUserId(long userId) {
+    public void setUserId(String userId) {
         this.userId = userId;
     }
 
@@ -36,6 +54,24 @@ public class UserDetails implements Serializable {
     public void setPhone(String phone) {
         this.phone = phone;
     }
+
+    public UserDetails withUserId(String userId) {
+
+        this.userId = userId;
+        return this;
+    }
+
+    public UserDetails withEmail(String email) {
+        this.email = email;
+        return this;
+    }
+    public UserDetails withPhone(String phone) {
+
+        this.phone = phone;
+        return this;
+    }
+
+
 
     @Override
     public String toString() {

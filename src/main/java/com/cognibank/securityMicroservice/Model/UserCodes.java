@@ -13,14 +13,14 @@ public class UserCodes implements Serializable {
 
     private static final long serialversionUID = 12L;
 
-    private long userId;
+    private String userId;
     private String type;
     private String code;
     //@Ignore
     private Map<String, String> codeTypes;
 
 
-    public UserCodes withUserId(long userId){
+    public UserCodes withUserId(String userId){
         this.userId = userId;
         return this;
     }
@@ -42,7 +42,7 @@ public class UserCodes implements Serializable {
         return codeTypes;
     }
 
-    public long getUserId() {
+    public String getUserId() {
         return userId;
     }
 

@@ -24,6 +24,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 @RestController("/")
@@ -43,28 +44,8 @@ public class MainController {
     private Environment env;
 
     private Map<String, String> codesWithTypes = new HashMap<>();
+    private ConcurrentHashMap<String, UserDetails> userDetailsConcurrentHashMap = new ConcurrentHashMap<>();
 
-
-    /**
-     * Receive user-details from UI and send it to User - management
-     *
-     * @param user
-     * @return Mocked user details
-     */
-    @PostMapping(path = "userManagement", consumes = "application/json", produces = "application/json")
-    public UserDetails sendDataToUserManagement(@RequestBody String user) {
-
-        UserDetails mailAndPhone = new UserDetails();
-        mailAndPhone.setUserId(123456789);
-        mailAndPhone.setEmail("anilvarma@gmail.com");
-        mailAndPhone.setPhone("+11234567890");
-
-        /**
-         * TO DO
-         * add actual implementation for user management call to retrieve user
-         */
-        return mailAndPhone;
-    }
 
     /**
      * Security send notification to user by email or phone
@@ -89,8 +70,10 @@ public class MainController {
      */
     @ApiOperation("Returns user details from user management")
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<JSONObject> loginUser(@RequestBody String user, HttpSession session) {
+    public ResponseEntity<UserDetails> loginUser(@RequestBody String user, HttpSession session) {
 
+
+        System.out.println("This is a session" + session);
         final String uri = env.getProperty("userManagement.getUserDetails");
 
         RestTemplate restTemplate = new RestTemplate();
@@ -99,39 +82,57 @@ public class MainController {
 
         HttpEntity<String> request = new HttpEntity<>(user, headers);
 
-        JSONObject body = restTemplate.postForObject(uri, request, JSONObject.class);
+        UserDetails newUserDetails = restTemplate.postForObject(uri, request, UserDetails.class);
 
-        if (body.get("userId").toString() != null ) {
-            return  new ResponseEntity<JSONObject>(maskUserDetails(body),HttpStatus.OK);
+        userDetailsConcurrentHashMap.put(newUserDetails.getUserId(), newUserDetails);
+
+        if (newUserDetails.getUserId() != null) {
+            session.setMaxInactiveInterval(1800);
+            return new ResponseEntity<UserDetails>(maskUserDetails(newUserDetails), HttpStatus.OK);
         } else {
-            return new ResponseEntity<JSONObject>(HttpStatus.NOT_FOUND);
+            return new ResponseEntity<UserDetails>(HttpStatus.NOT_FOUND);
         }
+    }
+
+    /**
+     * Receive data from UI and forward it to UserManagement team and
+     * receive email address and phone number from UserManagement and
+     * forward email/phone to UI
+     *
+     * @param user
+     * @param session
+     * @return user details if status os ok, if not it returns not found status
+     */
+    @ApiOperation("Returns user details from user management")
+    @PostMapping(path = "logoutUser", consumes = "application/json", produces = "application/json")
+    public void logoutUser(@RequestBody String user, HttpSession session) {
+        session.invalidate();
     }
 
     /**
      * To mask the data of email and phone
      *
-     * @param toMaskUserDetails
+     * @param newUserDetails
      * @return Masked user details
      */
 
-    public JSONObject maskUserDetails(JSONObject toMaskUserDetails) {
+    public UserDetails maskUserDetails(UserDetails newUserDetails) {
 
         String email = "";
         String phone = "";
 
-        if(toMaskUserDetails.get("phone") != null){
-            phone = toMaskUserDetails.get("phone").toString();
+        if (newUserDetails.isHasNumber()) {
+            phone = newUserDetails.getPhone();
             phone = phone.replace(phone.substring(4, 9), "XXXXX");
-            toMaskUserDetails.replace("phone", phone);
+            newUserDetails.withPhone(phone);
         }
-        if(toMaskUserDetails.get("email") != null){
-            email = toMaskUserDetails.get("email").toString();
+        if (newUserDetails.isHasEmail()) {
+            email = newUserDetails.getEmail();
             email = email.replace(email.substring(1, email.indexOf('@')), "XXX");
-            toMaskUserDetails.replace("email", email);
+            newUserDetails.withEmail(email);
         }
 
-        return toMaskUserDetails;
+        return newUserDetails;
     }
 
 
@@ -156,31 +157,30 @@ public class MainController {
         try {
             map = mapper.readValue(notificationDetails, new TypeReference<Map<String, String>>() {
             });
-            System.out.println(map.toString());
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        Optional<UserDetails> validateThisUser = userDetailsRepository.findById(Long.parseLong(map.get("userId")));
+        UserDetails validateThisUser = userDetailsConcurrentHashMap.get(map.get("userId"));
 
-        if (!validateThisUser.isPresent()) {
+        if (validateThisUser == null) {
             return new ResponseEntity<Map<String, String>>(HttpStatus.NOT_FOUND);
         }
         //if user present, get email/phone
-        if (validateThisUser.isPresent()) {
+        if (validateThisUser != null) {
             String type = map.get("type");
             //generate OTP
             String otpCode = generateOTP();
             if (type.equalsIgnoreCase("email")) {
-                value = validateThisUser.get().getEmail();
+                value = validateThisUser.getEmail();
             } else {
-                value = validateThisUser.get().getPhone();
+                value = validateThisUser.getPhone();
             }
 
             // Started the session for OTP Code
             codesWithTypes.put("otp", otpCode);
-            session.setAttribute("otpCode", new UserCodes().withUserId(Long.parseLong(map.get("userId")))
+            session.setAttribute("otpCode", new UserCodes().withUserId(map.get("userId"))
                     .withCodeTypes(codesWithTypes));
             session.setMaxInactiveInterval(500);
             map.put(type, value);
@@ -200,6 +200,7 @@ public class MainController {
                 e.printStackTrace();
             }
         }
+
         return new ResponseEntity<Map<String, String>>(map, HttpStatus.OK);
     }
 
@@ -223,10 +224,6 @@ public class MainController {
 
         System.out.println(userCodes.getUserId());
         System.out.println(userCodes.getCode());
-        System.out.println(userCodes.getType());
-        System.out.println(userCodes.getCodeTypes().get("otp"));
-        System.out.println(httpSession.getAttributeNames());
-        System.out.println(httpSession.getAttribute("otp"));
 
         UserCodes validateThisUser = (UserCodes) httpSession.getAttribute("otpCode");
         if (validateThisUser != null) {
@@ -252,7 +249,7 @@ public class MainController {
     }
 
 
-    public String authCodeGenerator(Long userId) {
+    public String authCodeGenerator(String userId) {
         String credentials = UUID.randomUUID().toString();
 
         return Base64.getEncoder().encodeToString((userId + ":" + credentials).getBytes());
