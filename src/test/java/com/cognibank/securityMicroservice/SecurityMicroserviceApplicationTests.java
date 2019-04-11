@@ -38,9 +38,6 @@ public class SecurityMicroserviceApplicationTests {
     @Autowired
     private MockMvc mockMvc;
 
-    @Mock
-    private UserDetailsRepository userDetailsRepository;
-
     @InjectMocks
     private MainController mainController;
 
@@ -90,7 +87,7 @@ public class SecurityMicroserviceApplicationTests {
                // .session(mockSession)
                 .contentType("application/json")
                 .sessionAttr("otpCode", new UserCodes()
-                        .withUserId(1234L)
+                        .withUserId("1234")
                         .withCodeTypes(userCodesMap))
                 .content("{\n" +
                         "  \"userId\" : " + 1234L + ",\n" +
@@ -103,12 +100,11 @@ public class SecurityMicroserviceApplicationTests {
 
     @Test
     public void sendOtpNotifications() throws Exception {
-        Long userID = 1234L;
+        String userID = "1234";
         UserDetails userDetails = new UserDetails();
         userDetails.setUserId(userID);
         userDetails.setEmail("anilvarma0093@gmail.com");
         userDetails.setPhone("1234567890");
-        userDetailsRepository.save(userDetails);
         this.mockMvc.perform(post("/sendOtp").contentType("application/json").content("{\n" +
                 "  \"userId\" : " + userID + ",\n" +
                 "  \"type\" : \"email\"\n" +

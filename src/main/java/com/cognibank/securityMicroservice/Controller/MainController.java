@@ -1,11 +1,9 @@
 package com.cognibank.securityMicroservice.Controller;
 
 import com.cognibank.securityMicroservice.Model.NotificationMessage;
-import com.cognibank.securityMicroservice.Model.User;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
 import com.cognibank.securityMicroservice.Repository.NotificationMessageRepository;
-import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
 import com.cognibank.securityMicroservice.Service.RabbitSenderService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,9 +28,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @RestController("/")
 @Api(description = "Set of endpoints for authentication, generating otp for email and phone userDetails.")
 public class MainController {
-
-    @Autowired
-    private UserDetailsRepository userDetailsRepository;
 
     @Autowired
     private NotificationMessageRepository notificationMessageRepository;
@@ -65,15 +60,12 @@ public class MainController {
      * forward email/phone to UI
      *
      * @param user
-     * @param session
      * @return user details if status os ok, if not it returns not found status
      */
     @ApiOperation("Returns user details from user management")
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<UserDetails> loginUser(@RequestBody String user, HttpSession session) {
+    public ResponseEntity<UserDetails> loginUser(@RequestBody String user) {
 
-
-        System.out.println("This is a session" + session);
         final String uri = env.getProperty("userManagement.getUserDetails");
 
         RestTemplate restTemplate = new RestTemplate();
@@ -87,7 +79,6 @@ public class MainController {
         userDetailsConcurrentHashMap.put(newUserDetails.getUserId(), newUserDetails);
 
         if (newUserDetails.getUserId() != null) {
-            session.setMaxInactiveInterval(1800);
             return new ResponseEntity<UserDetails>(maskUserDetails(newUserDetails), HttpStatus.OK);
         } else {
             return new ResponseEntity<UserDetails>(HttpStatus.NOT_FOUND);
@@ -149,6 +140,7 @@ public class MainController {
     public ResponseEntity<Map<String, String>> sendOtpToNotification(
             @ApiParam(name = "userId", value = "email", required = true)
             @RequestBody String notificationDetails, HttpSession session) {
+
 
         ObjectMapper mapper = new ObjectMapper();
         String value;
