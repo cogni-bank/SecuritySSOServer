@@ -1,6 +1,14 @@
 package com.cognibank.securityMicroservice.Model;
 
+import javax.persistence.Entity;
+import javax.persistence.Id;
+
+@Entity
 public class NotificationMessage {
+
+    @Id
+    private long userId;
+
     private String email;
     private String phone;
     private long code;
@@ -8,6 +16,11 @@ public class NotificationMessage {
 
     public NotificationMessage() {
 
+    }
+
+    public NotificationMessage withUserId (final long userId) {
+        setUserId(userId);
+        return this;
     }
 
     public NotificationMessage withEmail (final String emailId) {
@@ -29,6 +42,15 @@ public class NotificationMessage {
         setType(type);
         return this;
     }
+
+    public long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(long userId) {
+        this.userId = userId;
+    }
+
 
     public String getEmail() {
         return email;

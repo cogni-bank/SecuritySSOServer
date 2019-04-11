@@ -21,7 +21,6 @@ public class UserSecurityConfiguration extends WebSecurityConfigurerAdapter impl
                 .and()
                 .headers()
                 .frameOptions()
-                .disable()   ;
+                .disable();
     }
-
 }

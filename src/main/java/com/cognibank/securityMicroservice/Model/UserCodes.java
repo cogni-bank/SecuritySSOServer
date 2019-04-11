@@ -1,20 +1,22 @@
 package com.cognibank.securityMicroservice.Model;
 
+import jdk.nashorn.internal.ir.annotations.Ignore;
+import org.springframework.context.annotation.ComponentScan;
+
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import java.io.Serializable;
 import java.util.Map;
-
 //@Entity
+
 public class UserCodes implements Serializable {
 
-    private static final long serialversionUID =
-            12L;
+    private static final long serialversionUID = 12L;
 
-  //  @Id
     private long userId;
     private String type;
     private String code;
+    //@Ignore
     private Map<String, String> codeTypes;
 
 

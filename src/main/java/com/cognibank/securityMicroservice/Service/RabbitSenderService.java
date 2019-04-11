@@ -18,6 +18,8 @@ public class RabbitSenderService {
 
 
     public void send(NotificationMessage notificationDetails) throws Exception{
+
+
         rabbitTemplate.convertAndSend(env.getProperty("spring.rabbitmq.api.directExchangeName"), env.getProperty("spring.rabbitmq.api.routingKey.otp"),notificationDetails);
         System.out.println("Send msg = " + notificationDetails);
     }
