@@ -7,8 +7,7 @@ import javax.persistence.Id;
 public class NotificationMessage {
 
     @Id
-    private long userId;
-
+    private String userId;
     private String email;
     private String phone;
     private long code;
@@ -18,7 +17,7 @@ public class NotificationMessage {
 
     }
 
-    public NotificationMessage withUserId (final long userId) {
+    public NotificationMessage withUserId (String userId) {
         setUserId(userId);
         return this;
     }
@@ -43,11 +42,11 @@ public class NotificationMessage {
         return this;
     }
 
-    public long getUserId() {
+    public String getUserId() {
         return userId;
     }
 
-    public void setUserId(long userId) {
+    public void setUserId(String userId) {
         this.userId = userId;
     }
 

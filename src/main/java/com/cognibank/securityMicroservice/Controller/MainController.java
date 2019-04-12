@@ -11,11 +11,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
-import net.minidev.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import javax.servlet.http.HttpServletRequest;
@@ -25,6 +26,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 
+@CrossOrigin("*")
 @RestController("/")
 @Api(description = "Set of endpoints for authentication, generating otp for email and phone userDetails.")
 public class MainController {
@@ -64,7 +66,7 @@ public class MainController {
      */
     @ApiOperation("Returns user details from user management")
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<UserDetails> loginUser(@RequestBody String user) {
+    public UserDetails loginUser(@RequestBody String user) {
 
         final String uri = env.getProperty("userManagement.getUserDetails");
 
@@ -74,15 +76,23 @@ public class MainController {
 
         HttpEntity<String> request = new HttpEntity<>(user, headers);
 
-        UserDetails newUserDetails = restTemplate.postForObject(uri, request, UserDetails.class);
+        try {
+            ResponseEntity<UserDetails> newUserDetailsEntity = restTemplate.postForEntity(uri, request, UserDetails.class);
+            if (newUserDetailsEntity.getStatusCode().equals(HttpStatus.OK)) {
 
-        userDetailsConcurrentHashMap.put(newUserDetails.getUserId(), newUserDetails);
+                UserDetails newUserDetails = newUserDetailsEntity.getBody();
 
-        if (newUserDetails.getUserId() != null) {
-            return new ResponseEntity<UserDetails>(maskUserDetails(newUserDetails), HttpStatus.OK);
-        } else {
-            return new ResponseEntity<UserDetails>(HttpStatus.NOT_FOUND);
+                userDetailsConcurrentHashMap.put(newUserDetails.getUserId(), newUserDetails);
+
+                return maskUserDetails(newUserDetails);
+            }
+        } catch (HttpServerErrorException e) {
+            throw new UserManagementServiceUnavailabeException();
+        } catch (HttpClientErrorException e) {
+            throw new UserNameOrPasswordWrongException();
         }
+
+        throw new UserNameOrPasswordWrongException();
     }
 
     /**
@@ -176,9 +186,8 @@ public class MainController {
                     .withCodeTypes(codesWithTypes));
             session.setMaxInactiveInterval(500);
             map.put(type, value);
-            map.remove("userId");
+            //map.remove("userId");
             map.put("code", otpCode);
-
 
             //send to notifications --Rabbit MQ
             try {
@@ -186,8 +195,9 @@ public class MainController {
                         .withEmail(map.get("email"))
                         .withType(map.get("type"))
                         .withCode(Long.parseLong(map.get("code")));
-                notificationMessageRepository.save(message);
                 rabbitSenderService.send(message);
+                message.withUserId(map.get("userId"));
+                notificationMessageRepository.save(message);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -301,4 +311,11 @@ public class MainController {
 
     }
 
+    @ResponseStatus(code = HttpStatus.UNAUTHORIZED, reason = "User nama or password was wrong")
+    private class UserNameOrPasswordWrongException extends RuntimeException {
+    }
+
+    @ResponseStatus(code = HttpStatus.SERVICE_UNAVAILABLE, reason = "User management is down")
+    private class UserManagementServiceUnavailabeException extends RuntimeException {
+    }
 }
