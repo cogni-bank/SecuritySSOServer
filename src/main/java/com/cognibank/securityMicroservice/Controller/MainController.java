@@ -1,5 +1,7 @@
 package com.cognibank.securityMicroservice.Controller;
 
+import com.cognibank.securityMicroservice.Exceptions.UserManagementServiceUnavailabeException;
+import com.cognibank.securityMicroservice.Exceptions.UserNameOrPasswordWrongException;
 import com.cognibank.securityMicroservice.Model.NotificationMessage;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
@@ -14,6 +16,7 @@ import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.*;
+import org.springframework.session.jdbc.config.annotation.web.http.EnableJdbcHttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -42,6 +45,7 @@ public class MainController {
 
     private Map<String, String> codesWithTypes = new HashMap<>();
     private ConcurrentHashMap<String, UserDetails> userDetailsConcurrentHashMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, HttpSession> userOTPSessionConcurrentHashMap = new ConcurrentHashMap<>();
 
 
     /**
@@ -66,7 +70,7 @@ public class MainController {
      */
     @ApiOperation("Returns user details from user management")
     @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
-    public UserDetails loginUser(@RequestBody String user) {
+    public UserDetails loginUser(@RequestBody String user) throws UserManagementServiceUnavailabeException {
 
         final String uri = env.getProperty("userManagement.getUserDetails");
 
@@ -152,6 +156,7 @@ public class MainController {
             @RequestBody String notificationDetails, HttpSession session) {
 
 
+
         ObjectMapper mapper = new ObjectMapper();
         String value;
         Map<String, String> map = new HashMap<>();
@@ -185,6 +190,8 @@ public class MainController {
             session.setAttribute("otpCode", new UserCodes().withUserId(map.get("userId"))
                     .withCodeTypes(codesWithTypes));
             session.setMaxInactiveInterval(500);
+
+            userOTPSessionConcurrentHashMap.put(validateThisUser.getUserId(), session);
             map.put(type, value);
             //map.remove("userId");
             map.put("code", otpCode);
@@ -217,18 +224,16 @@ public class MainController {
      */
     @ApiOperation("Validating the user with otp")
     @PostMapping(path = "validateUserWithOTP", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletRequest request, HttpServletResponse response) {
-
-        HttpSession httpSession = request.getSession();
+    public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletRequest request
+            ,HttpServletResponse response, HttpSession userSession) {
 
         String message = "User not found";
         Long typeValid;
 
-        System.out.println(userCodes.getUserId());
-        System.out.println(userCodes.getCode());
-
+        HttpSession httpSession = userOTPSessionConcurrentHashMap.get(userCodes.getUserId());
         UserCodes validateThisUser = (UserCodes) httpSession.getAttribute("otpCode");
         if (validateThisUser != null) {
+
             typeValid = validateThisUser.getCodeTypes().keySet().stream().filter(s -> s.equalsIgnoreCase("otp")).count();
             if (typeValid == 0) {
                 return new ResponseEntity<String>("Session Expired", HttpStatus.NOT_FOUND);
@@ -243,6 +248,8 @@ public class MainController {
                 httpSession.setAttribute("otpCode", new UserCodes().withUserId(validateThisUser.getUserId())
                         .withCodeTypes(codesWithTypes));
                 message = "User found!!";
+                userSession = request.getSession();
+                userSession.setAttribute("LoggedInUser", userCodes.getUserId());
                 return new ResponseEntity<String>(message, HttpStatus.OK);
             }
 
@@ -305,17 +312,8 @@ public class MainController {
         return true;
     }
 
-    @ExceptionHandler
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    private void userNotFoundHandler(UserNotFoundException ex) {
 
-    }
 
-    @ResponseStatus(code = HttpStatus.UNAUTHORIZED, reason = "User nama or password was wrong")
-    private class UserNameOrPasswordWrongException extends RuntimeException {
-    }
 
-    @ResponseStatus(code = HttpStatus.SERVICE_UNAVAILABLE, reason = "User management is down")
-    private class UserManagementServiceUnavailabeException extends RuntimeException {
-    }
+
 }

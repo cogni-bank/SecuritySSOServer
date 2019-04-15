@@ -4,7 +4,7 @@ import com.cognibank.securityMicroservice.Controller.MainController;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
 //import com.cognibank.securityMicroservice.Repository.UserCodesRepository;
-import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
+//import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
 import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
