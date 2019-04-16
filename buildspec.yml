@@ -10,7 +10,7 @@ env:
     AWS_ACCOUNT_ID: "/CodeBuild/AWS_ACCOUNT_ID"
     AWS_ACCESS_KEY_ID: "/CodeBuild/AWS_ACCESS_KEY_ID"
     AWS_SECRET_ACCESS_KEY: "/CodeBuild/AWS_SECRET_ACCESS_KEY"
-    RABBITMQ_HOSTNAME: "/CodeBuild/RABBITMQ_HOSTNAME"
+    RABBITMQ_HOST: "/CodeBuild/RABBITMQ_HOST"
     RABBITMQ_PORT: "/CodeBuild/RABBITMQ_PORT"
     RABBITMQ_USERNAME: "/CodeBuild/RABBITMQ_USERNAME"
     RABBITMQ_PASSWORD: "/CodeBuild/RABBITMQ_PASSWORD"
@@ -32,8 +32,8 @@ phases:
       - ./gradlew build --debug
   post_build:
     commands:
-      - echo setting environment variables... un->$RABBITMQ_HOSTNAME pw->$RABBITMQ_PORT
-      - export RABBITMQ_HOSTNAME=$RABBITMQ_HOSTNAME
+      - echo setting environment variables... un->$RABBITMQ_HOST pw->$RABBITMQ_PORT
+      - export RABBITMQ_HOST=$RABBITMQ_HOST
       - export RABBITMQ_PORT=$RABBITMQ_PORT
       - echo setting environment variables... un->$RABBITMQ_USERNAME pw->$RABBITMQ_PASSWORD
       - export RABBITMQ_USERNAME=$RABBITMQ_USERNAME
