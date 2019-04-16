@@ -6,6 +6,7 @@ import com.cognibank.securityMicroservice.Model.NotificationMessage;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
 import com.cognibank.securityMicroservice.Repository.NotificationMessageRepository;
+import com.cognibank.securityMicroservice.Service.MainService;
 import com.cognibank.securityMicroservice.Service.RabbitSenderService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,11 +17,11 @@ import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.http.*;
-import org.springframework.session.jdbc.config.annotation.web.http.EnableJdbcHttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
+
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -30,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 
 @CrossOrigin("*")
-@RestController("/")
+@RestController
 @Api(description = "Set of endpoints for authentication, generating otp for email and phone userDetails.")
 public class MainController {
 
@@ -43,6 +44,9 @@ public class MainController {
     @Autowired
     private Environment env;
 
+    @Autowired
+    private MainService mainService;
+
     private Map<String, String> codesWithTypes = new HashMap<>();
     private ConcurrentHashMap<String, UserDetails> userDetailsConcurrentHashMap = new ConcurrentHashMap<>();
     private ConcurrentHashMap<String, HttpSession> userOTPSessionConcurrentHashMap = new ConcurrentHashMap<>();
@@ -53,7 +57,7 @@ public class MainController {
      *
      * @param emailOrPhone
      */
-    @PostMapping(path = "notification", consumes = "application/json", produces = "application/json")
+    @PostMapping(path = "/notification", consumes = "application/json", produces = "application/json")
     public void sendDataToNotification(@RequestBody String emailOrPhone) {
 
         System.out.print("sendDataToNotification " + emailOrPhone);
@@ -69,7 +73,7 @@ public class MainController {
      * @return user details if status os ok, if not it returns not found status
      */
     @ApiOperation("Returns user details from user management")
-    @PostMapping(path = "loginUser", consumes = "application/json", produces = "application/json")
+    @PostMapping(path = "/loginUser", consumes = "application/json", produces = "application/json")
     public UserDetails loginUser(@RequestBody String user) throws UserManagementServiceUnavailabeException {
 
         final String uri = env.getProperty("userManagement.getUserDetails");
@@ -88,8 +92,9 @@ public class MainController {
 
                 userDetailsConcurrentHashMap.put(newUserDetails.getUserId(), newUserDetails);
 
-                return maskUserDetails(newUserDetails);
+                return mainService.maskUserDetails(newUserDetails);
             }
+
         } catch (HttpServerErrorException e) {
             throw new UserManagementServiceUnavailabeException();
         } catch (HttpClientErrorException e) {
@@ -97,47 +102,6 @@ public class MainController {
         }
 
         throw new UserNameOrPasswordWrongException();
-    }
-
-    /**
-     * Receive data from UI and forward it to UserManagement team and
-     * receive email address and phone number from UserManagement and
-     * forward email/phone to UI
-     *
-     * @param user
-     * @param session
-     * @return user details if status os ok, if not it returns not found status
-     */
-    @ApiOperation("Returns user details from user management")
-    @PostMapping(path = "logoutUser", consumes = "application/json", produces = "application/json")
-    public void logoutUser(@RequestBody String user, HttpSession session) {
-        session.invalidate();
-    }
-
-    /**
-     * To mask the data of email and phone
-     *
-     * @param newUserDetails
-     * @return Masked user details
-     */
-
-    public UserDetails maskUserDetails(UserDetails newUserDetails) {
-
-        String email = "";
-        String phone = "";
-
-        if (newUserDetails.isHasNumber()) {
-            phone = newUserDetails.getPhone();
-            phone = phone.replace(phone.substring(4, 9), "XXXXX");
-            newUserDetails.withPhone(phone);
-        }
-        if (newUserDetails.isHasEmail()) {
-            email = newUserDetails.getEmail();
-            email = email.replace(email.substring(1, email.indexOf('@')), "XXX");
-            newUserDetails.withEmail(email);
-        }
-
-        return newUserDetails;
     }
 
 
@@ -150,12 +114,10 @@ public class MainController {
      * @return status of OTP
      */
     @ApiOperation("Sending otp to RabbitMQ")
-    @PostMapping(path = "sendOtp", consumes = "application/json", produces = "application/json")
+    @PostMapping(path = "/sendOtp", consumes = "application/json", produces = "application/json")
     public ResponseEntity<Map<String, String>> sendOtpToNotification(
             @ApiParam(name = "userId", value = "email", required = true)
             @RequestBody String notificationDetails, HttpSession session) {
-
-
 
         ObjectMapper mapper = new ObjectMapper();
         String value;
@@ -164,21 +126,20 @@ public class MainController {
         try {
             map = mapper.readValue(notificationDetails, new TypeReference<Map<String, String>>() {
             });
-
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         UserDetails validateThisUser = userDetailsConcurrentHashMap.get(map.get("userId"));
-
         if (validateThisUser == null) {
             return new ResponseEntity<Map<String, String>>(HttpStatus.NOT_FOUND);
+
         }
         //if user present, get email/phone
         if (validateThisUser != null) {
             String type = map.get("type");
             //generate OTP
-            String otpCode = generateOTP();
+            String otpCode = mainService.generateOTP();
             if (type.equalsIgnoreCase("email")) {
                 value = validateThisUser.getEmail();
             } else {
@@ -198,6 +159,7 @@ public class MainController {
 
             //send to notifications --Rabbit MQ
             try {
+
                 NotificationMessage message = new NotificationMessage()
                         .withEmail(map.get("email"))
                         .withType(map.get("type"))
@@ -205,11 +167,12 @@ public class MainController {
                 rabbitSenderService.send(message);
                 message.withUserId(map.get("userId"));
                 notificationMessageRepository.save(message);
+
             } catch (Exception e) {
+
                 e.printStackTrace();
             }
         }
-
         return new ResponseEntity<Map<String, String>>(map, HttpStatus.OK);
     }
 
@@ -223,9 +186,9 @@ public class MainController {
      * @return authID
      */
     @ApiOperation("Validating the user with otp")
-    @PostMapping(path = "validateUserWithOTP", consumes = "application/json", produces = "application/json")
+    @PostMapping(path = "/validateUserWithOTP", consumes = "application/json", produces = "application/json")
     public ResponseEntity<String> validateUser(@RequestBody UserCodes userCodes, HttpServletRequest request
-            ,HttpServletResponse response, HttpSession userSession) {
+            ,HttpServletResponse response) {
 
         String message = "User not found";
         Long typeValid;
@@ -240,16 +203,26 @@ public class MainController {
             }
 
             if ((userCodes.getCode()).equalsIgnoreCase(validateThisUser.getCodeTypes().get("otp"))) {
-                String authCode = authCodeGenerator(validateThisUser.getUserId());
+                String authCode = mainService.authCodeGenerator(validateThisUser.getUserId());
+
+                //auth code added to response header
                 response.addHeader("Authorization", authCode);
 
                 codesWithTypes.put("authID", authCode);
-                validateThisUser.withCodeTypes(codesWithTypes);
+                validateThisUser
+                        .withCodeTypes(codesWithTypes);
+
                 httpSession.setAttribute("otpCode", new UserCodes().withUserId(validateThisUser.getUserId())
                         .withCodeTypes(codesWithTypes));
                 message = "User found!!";
-                userSession = request.getSession();
+
+                HttpSession userSession = request.getSession();
                 userSession.setAttribute("LoggedInUser", userCodes.getUserId());
+
+                // clear information about users OTP and temporary details if verified
+                userOTPSessionConcurrentHashMap.remove(userCodes.getUserId());
+                userDetailsConcurrentHashMap.remove(userCodes.getUserId());
+
                 return new ResponseEntity<String>(message, HttpStatus.OK);
             }
 
@@ -258,59 +231,39 @@ public class MainController {
     }
 
 
-    public String authCodeGenerator(String userId) {
-        String credentials = UUID.randomUUID().toString();
-
-        return Base64.getEncoder().encodeToString((userId + ":" + credentials).getBytes());
-    }
-
-    public String generateOTP() {
-        int otpNumber = 100000 + new Random().nextInt(900000);
-        String otp = Integer.toString(otpNumber);
-        return otp;
-    }
 
 
+
+    /**
+     * This will be called before every UI call to authenticate the user
+     * @param httpServletRequest
+     * @param httpSession
+     * @return
+     */
     @ApiOperation("Checking for user authentication")
-    @GetMapping(path = "auth")
+    @GetMapping(path = "/auth")
     public ResponseEntity<String> authenticatingTheRequest(HttpServletRequest httpServletRequest, HttpSession httpSession) {
         String message = " user not found";
 
         String authToCompare = httpServletRequest.getHeader("Authorization");
-
-        Enumeration<String> attributeNames = httpSession.getAttributeNames();
         UserCodes authFromSession = (UserCodes) httpSession.getAttribute("otpCode");
 
-
-        if (authFromSession.getCodeTypes().get("authID").equalsIgnoreCase(authToCompare)) {
+        if (codesWithTypes.get("authID").equalsIgnoreCase(authToCompare)) {
             message = "User is authenticated";
-            return new ResponseEntity<String>(HttpStatus.OK);
+            return new ResponseEntity<String>(message, HttpStatus.ACCEPTED);
         }
 
-        return new ResponseEntity<String>(HttpStatus.NOT_FOUND);
-
+        return new ResponseEntity<String>(message,HttpStatus.UNAUTHORIZED);
     }
 
-    @GetMapping(path = "forward")
-    public ResponseEntity<String> forwardToMe(HttpServletRequest httpServletRequest, HttpSession httpSession) {
 
-        UserCodes authFromSession = (UserCodes) httpSession.getAttribute("otpCode");
 
-        if (authFromSession != null) {
-            if (authFromSession.getCodeTypes().get("authID").equalsIgnoreCase(httpServletRequest.getHeader("Authorization"))) {
-                System.out.println("in accpeted");
-                return new ResponseEntity<String>(HttpStatus.ACCEPTED);
-            }
-        }
-        return new ResponseEntity<String>("Is not Authorized User", HttpStatus.UNAUTHORIZED);
-    }
-
-    private boolean isPresent(String authorization) {
-        if (authorization == null || authorization.isEmpty()) {
-            return false;
-        }
-        return true;
-    }
+//    private boolean isPresent(String authorization) {
+//        if (authorization == null || authorization.isEmpty()) {
+//            return false;
+//        }
+//        return true;
+//    }
 
 
 

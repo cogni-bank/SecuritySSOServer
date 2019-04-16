@@ -3,10 +3,10 @@ package com.cognibank.securityMicroservice;
 import com.cognibank.securityMicroservice.Controller.MainController;
 import com.cognibank.securityMicroservice.Model.UserCodes;
 import com.cognibank.securityMicroservice.Model.UserDetails;
-//import com.cognibank.securityMicroservice.Repository.UserCodesRepository;
-//import com.cognibank.securityMicroservice.Repository.UserDetailsRepository;
+import com.cognibank.securityMicroservice.Service.MainService;
 import org.hamcrest.Matchers;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
@@ -33,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @RunWith(SpringRunner.class)
 @SpringBootTest
 @AutoConfigureMockMvc
+@Ignore
 public class SecurityMicroserviceApplicationTests {
 
     @Autowired
@@ -41,11 +42,15 @@ public class SecurityMicroserviceApplicationTests {
     @InjectMocks
     private MainController mainController;
 
+    @Autowired
+    private MainService mainService;
+
     @Before
     public void setUp(){
         MockitoAnnotations.initMocks(this);
         this.mockMvc = MockMvcBuilders.standaloneSetup(MainController.class).build();
     }
+
     @Test
     public void contextLoads() {
     }
@@ -53,12 +58,16 @@ public class SecurityMicroserviceApplicationTests {
 
     @Test
     public void userNameAndPasswordInfo() throws Exception {
-        this.mockMvc.perform(post("/loginUser").contentType("application/json").content("{\n" +
-                "  \"userName\" : \"anil\",\n" +
-                "  \"password\" : \"12345\"\n" +
+
+
+        this.mockMvc.perform(post("/loginUser")
+                .contentType("application/json")
+                .content("{\n" +
+                "  \"userName\" : \"Bereket\",\n" +
+                "  \"password\" : \"12345678\"\n" +
                 "}")).andExpect(status().isOk())
                 .andDo(print())
-                .andExpect(content().string(containsString("aniXXX@gmail.com")));
+                .andExpect(content().string(containsString("gilbertappiah9@gmail.com")));
     }
 
 
@@ -113,6 +122,7 @@ public class SecurityMicroserviceApplicationTests {
 
     @Test
     public void userAuthentication() throws Exception {
+
         mockMvc.perform(MockMvcRequestBuilders.get("/auth")
                 .header("Authorization", "MTIzNDU2"))
                 .andDo(print()).andExpect(status().isOk());
@@ -121,9 +131,19 @@ public class SecurityMicroserviceApplicationTests {
 
     @Test
     public void userAuthenticationFailed() throws Exception {
+        Map<String, String> codesWithTypes = new HashMap<>();
+
+        String userID = "1234";
+        UserDetails userDetails = new UserDetails();
+        userDetails.setUserId(userID);
+        userDetails.setEmail("anilvarma0093@gmail.com");
+        userDetails.setPhone("1234567890");
+
+        String authID = mainService.authCodeGenerator(userDetails.getUserId());
 
         mockMvc.perform(MockMvcRequestBuilders.get("/auth")
-                .header("Authorization", "MTIzND"))
+                .header("Authorization", authID))
+
                 .andDo(print()).andExpect(status().isNotFound());
 
     }
